@@ -1,0 +1,9 @@
+set_object:
+  description: Set a TecoAPI object value.
+  fields:
+    object: {description: "Object to set.", example: "plcBoolValue"}
+    value: {description: "Value to set", example: "1"}
+get_object:
+  description: Get a TecoAPI object value and display a notification.
+  fields:
+    parameter: {description: "Object to get.", example: "plcRealValue"}

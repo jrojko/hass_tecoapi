@@ -1,0 +1,8 @@
+{
+  "domain": "tecoapi",
+  "name": "TecoAPI",
+  "documentation": "https://github.com/jrojko/hass_tecoapi",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@jrojko"]
+}
