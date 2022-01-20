@@ -1,16 +1,24 @@
 """"TecoAPI Sensor."""
 import logging
-import voluptuous as vol
-import asyncio
-import aiohttp
 from datetime import timedelta
+import asyncio
+import voluptuous as vol
+import aiohttp
 
 from homeassistant.core import split_entity_id
-from homeassistant.components.group import ATTR_ADD_ENTITIES, ATTR_OBJECT_ID, SERVICE_SET, DOMAIN as DOMAIN_GROUP
-
+from homeassistant.components.group import (
+    ATTR_ADD_ENTITIES,
+    ATTR_OBJECT_ID,
+    SERVICE_SET,
+    DOMAIN as DOMAIN_GROUP
+)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.exceptions import PlatformNotReady
-from homeassistant.components.sensor import PLATFORM_SCHEMA, DEVICE_CLASSES_SCHEMA, DOMAIN as DOMAIN_SENSOR
+from homeassistant.components.sensor import (
+    PLATFORM_SCHEMA,
+    DEVICE_CLASSES_SCHEMA,
+    DOMAIN as DOMAIN_SENSOR
+)
 from homeassistant.helpers.entity import Entity
 from homeassistant.const import (
     CONF_NAME,
@@ -39,28 +47,29 @@ SENSOR_SCHEMA = {
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(SENSOR_SCHEMA)
 
 PARALLEL_UPDATES = 0
-SCAN_INTERVAL = timedelta(seconds=1)
+SCAN_INTERVAL = timedelta(seconds=3)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def create_group(hass, name, entities):
+    """Create group"""
     group = hass.components.group
 
     entity = await group.Group.async_create_group(
             hass,
             name,
-            control=False,
-            object_id="{}_{}".format(DOMAIN, "entities"),
+#            control=False,
+            object_id = "{}_{}".format(DOMAIN, "entities"),
         )
 
     _, group_id = split_entity_id(entity.entity_id)
 
     ids = []
-    for x in entities:
-        if not x._children:
-            ids.append(x.entity_id)
-    
+    for ent in entities:
+        if not ent._children:
+            ids.append(ent.entity_id)
+
     hass.async_add_job(
                 hass.services.async_call(
                     DOMAIN_GROUP,
@@ -75,7 +84,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if DATA_TECOAPI not in hass.data:
         raise PlatformNotReady
 
-    data = hass.data[DATA_TECOAPI];
+    data = hass.data[DATA_TECOAPI]
 
     entities = []
 
@@ -87,9 +96,9 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         xconfig = {CONF_NAME: name}
         await async_setup_sensor(hass, data, xconfig, entities, TECOAPI_GETINFO)
     elif discovery_info == TECOAPI_GETLIST:
-        objects = await data.async_get(TECOAPI_GETLIST, None)
+        objects = await data.async_get(TECOAPI_GETLIST, None, True)
         for objectid in objects:
-            await async_setup_sensor(hass, data, {}, entities, objectid)
+            await async_setup_sensor(hass, data, None, entities, objectid)
     else:
         for child_config in discovery_info:
             objectid = child_config.get(CONF_OBJECT)
@@ -104,25 +113,27 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 await create_group(hass, entity.name, entities)
 
 async def async_setup_sensor(hass, data, config, entities, objectid, parent = None):
+    """Set up sensor helper """
+    # pylint: disable=too-many-arguments
     try:
         if parent is None:
             if objectid == TECOAPI_GETINFO:
-                value = await data.async_get(TECOAPI_GETINFO, None)
+                value = await data.async_get(TECOAPI_GETINFO, None, True)
             else:
-                value = await data.async_get(TECOAPI_GETOBJECT, objectid)
+                value = await data.async_get(TECOAPI_GETOBJECT, objectid, True)
         else:
             value = parent.child_values[objectid]
-        
+
         if type(value) is dict:
             sensor = TecoApiSensor(data, config, objectid, value, parent)
             pos = len(entities)
-            
+
             sensors_config = config.get(CONF_SUBOBJECTS, [])
 
             for childid in value:
                 child_config = next((item for item in sensors_config if item.get(CONF_OBJECT) == childid), {})
                 await async_setup_sensor(hass, data, child_config, entities, childid, sensor)
-             
+
             if parent is None or not sensor._children:
                 entities.insert(pos, sensor)
         elif type(value) is not None:
@@ -131,20 +142,22 @@ async def async_setup_sensor(hass, data, config, entities, objectid, parent = No
             _LOGGER.error("Unable to setup %s", objectid)
 
     except asyncio.TimeoutError:
-        _LOGGER.exception("Timed out %s while fetching data", objectid)
+        _LOGGER.exception("Timed out %s while setup", objectid)
     except aiohttp.ClientError as err:
-        _LOGGER.exception("Error while %s fetching data: %s", objectid, err)
+        _LOGGER.exception("Error while %s setup: %s", objectid, err)
 
 class TecoApiSensor(Entity):
     """TecoAPI Sensor Entity."""
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self, data, config, objectid, value, parent):
         """Init."""
-        
+        # pylint: disable=too-many-arguments
+
         self._name = config.get(CONF_NAME)
         self._device_class = config.get(CONF_DEVICE_CLASS)
         self._unit_of_measurement = config.get(CONF_UNIT_OF_MEASUREMENT)
-        
+
         self._data = data
         self._objectid = objectid 
         self._parent = parent
@@ -179,11 +192,11 @@ class TecoApiSensor(Entity):
         """Return the state of the sensor."""
         if self._children:
             return None 
-       
+
         if self._parent:
             return self._parent.child_values[self._objectid]
         else:
-            return self._value;
+            return self._value
 
     @property
     def unit_of_measurement(self):
@@ -195,17 +208,17 @@ class TecoApiSensor(Entity):
         if self._parent is None:
             try:
                 if self._objectid == TECOAPI_GETINFO:
-                    value = await self._data.async_get(TECOAPI_GETINFO, None);
+                    value = await self._data.async_get(TECOAPI_GETINFO, None, False)
                 else:
-                    value = await self._data.async_get(TECOAPI_GETOBJECT, self._objectid);
+                    value = await self._data.async_get(TECOAPI_GETOBJECT, self._objectid, False)
 
                 if value is None:
                     _LOGGER.error("Unable to update %s", self._objectid)
                 else:
                     self._value = value
-               
+
             except asyncio.TimeoutError:
-                _LOGGER.exception("Timed out %s while fetching data", self._objectid)
+                _LOGGER.warning("Timed out %s while fetching data", self._objectid)
             except aiohttp.ClientError as err:
                 _LOGGER.exception("Error while %s fetching data: %s", self._objectid, err)
 
@@ -216,7 +229,7 @@ class TecoApiSensor(Entity):
             ret = self._parent.child_values[self._objectid]
         else: 
             ret = self._value
-            
+
         return ret
 
     @property
@@ -225,15 +238,15 @@ class TecoApiSensor(Entity):
             return self._parent.fullobjectid + '.' + self._objectid
         else:
             return self._objectid
-            
+
     def get_all_sensors(self, sensors = None):
         if sensors is None:
             sensors = []
-            
+
         if len(self._children) > 0:
             for child in self._children:
                 child.get_all_sensors(sensors)
         else:
             sensors.append(self)
-        
+
         return sensors

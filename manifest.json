@@ -4,5 +4,6 @@
   "documentation": "https://github.com/jrojko/hass_tecoapi",
   "requirements": [],
   "dependencies": [],
-  "codeowners": ["@jrojko"]
+  "codeowners": ["@jrojko"],
+  "version": "1.0.0"
 }

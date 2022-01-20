@@ -22,12 +22,12 @@ async def async_register_services(hass):
 
     async def set_parameter(call):
         data = hass.data[DATA_TECOAPI]
-        
+
         await data.async_put('PutObject', call.data[CONF_OBJECT], call.data[CONF_VALUE])
 
     async def get_parameter(call):
         data = hass.data[DATA_TECOAPI]
-        value = await data.async_get('GetObject', call.data[CONF_OBJECT]);
+        value = await data.async_get('GetObject', call.data[CONF_OBJECT], False)
 
         hass.components.persistent_notification.async_create(
             json.dumps(value, indent=1), "Nibe get parameter result"
@@ -51,4 +51,3 @@ async def async_register_services(hass):
     hass.services.async_register(
         DOMAIN, SERVICE_GET_OBJECT, get_parameter, SERVICE_GET_OBJECT_SCHEMA
     )
-

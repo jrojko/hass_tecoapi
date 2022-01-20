@@ -1,17 +1,20 @@
 """TecoAPI Switch."""
 import logging
-import voluptuous as vol
-import asyncio
-import aiohttp
 from datetime import timedelta
+import asyncio
+import voluptuous as vol
+import aiohttp
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.exceptions import PlatformNotReady
-from homeassistant.components.switch import PLATFORM_SCHEMA, DEVICE_CLASSES_SCHEMA, SwitchDevice, DOMAIN as DOMAIN_SWITCH
+from homeassistant.components.switch import (
+    PLATFORM_SCHEMA,
+    DEVICE_CLASSES_SCHEMA,
+    SwitchEntity, DOMAIN as DOMAIN_SWITCH
+)
 from homeassistant.const import (
     CONF_NAME,
     CONF_DEVICE_CLASS,
-    
 )
 
 from .const import (
@@ -32,7 +35,7 @@ SWITCH_SCHEMA = {
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(SWITCH_SCHEMA)
 
 PARALLEL_UPDATES = 0
-SCAN_INTERVAL = timedelta(seconds=1)
+SCAN_INTERVAL = timedelta(seconds=3)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if DATA_TECOAPI not in hass.data:
         raise PlatformNotReady
 
-    data = hass.data[DATA_TECOAPI];
+    data = hass.data[DATA_TECOAPI]
 
     entities = []
 
@@ -53,26 +56,29 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         for child_config in discovery_info:
             objectid = child_config.get(CONF_OBJECT)
             await async_setup_switch(hass, data, child_config, entities, objectid)
-            
+
     async_add_entities(entities, True)
 
 async def async_setup_switch(hass, data, config, entities, objectid, parent = None):
+    """Setup switch helper"""
+        # pylint: disable=too-many-arguments
+
     try:
         if parent is None:
-            value = await data.async_get(TECOAPI_GETOBJECT, objectid)
+            value = await data.async_get(TECOAPI_GETOBJECT, objectid, True)
         else:
             value = parent.child_values[objectid]
-        
+
         if type(value) is dict:
             switch = TecoApiSwitch(data, config, objectid, value, parent)
             pos = len(entities)
-            
+
             switches_config = config.get(CONF_SUBOBJECTS, [])
 
             for childid in value:
                 child_config = next((item for item in switches_config if item.get(CONF_OBJECT) == childid), {})
                 await async_setup_switch(hass, data, child_config, entities, childid, switch)
-             
+
             if parent is None or not switch._children:
                 entities.insert(pos, switch)
         elif type(value) is bool:
@@ -81,19 +87,21 @@ async def async_setup_switch(hass, data, config, entities, objectid, parent = No
             _LOGGER.error("Unable to setup %s", objectid)
 
     except asyncio.TimeoutError:
-        _LOGGER.exception("Timed out %s while fetching data", objectid)
+        _LOGGER.exception("Timed out %s while setup", objectid)
     except aiohttp.ClientError as err:
-        _LOGGER.exception("Error while %s fetching data: %s", objectid, err)
+        _LOGGER.exception("Error while %s setup: %s", objectid, err)
 
-class TecoApiSwitch(SwitchDevice):
+class TecoApiSwitch(SwitchEntity):
     """TecoAPI Switch Entity."""
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self, data, config, objectid, value, parent):
         """Init."""
-        
+        # pylint: disable=too-many-arguments
+
         self._name = config.get(CONF_NAME)
         self._device_class = config.get(CONF_DEVICE_CLASS)
-        
+
         self._data = data
         self._objectid = objectid 
         self._parent = parent
@@ -131,12 +139,10 @@ class TecoApiSwitch(SwitchDevice):
                 if child.is_on:
                     return True
             return False
-        
-       
+
         if self._parent:
             return self._parent.child_values[self._objectid]
-        else:
-            return self._value;
+        return self._value
 
     async def async_turn_on(self, **kwargs):
         """Turn the device on."""
@@ -176,14 +182,14 @@ class TecoApiSwitch(SwitchDevice):
         """Get the current state, catching errors."""
         if self._parent is None:
             try:
-                value = await self._data.async_get(TECOAPI_GETOBJECT, self._objectid);
+                value = await self._data.async_get(TECOAPI_GETOBJECT, self._objectid, False)
                 if value is None:
                     _LOGGER.error("Unable to update %s", self._objectid)
                 else:
                     self._value = value
-               
+
             except asyncio.TimeoutError:
-                _LOGGER.exception("Timed out %s while fetching data", self._objectid)
+                _LOGGER.warning("Timed out %s while fetching data", self._objectid)
             except aiohttp.ClientError as err:
                 _LOGGER.exception("Error while %s fetching data: %s", self._objectid, err)
 
@@ -194,13 +200,12 @@ class TecoApiSwitch(SwitchDevice):
             ret = self._parent.child_values[self._objectid]
         else: 
             ret = self._value
-            
+
         return ret
 
     @property
     def fullobjectid(self):
         if self._parent:
             return self._parent.fullobjectid + '.' + self._objectid
-        else:
-            return self._objectid
+        return self._objectid
 
