@@ -118,7 +118,7 @@ class TecoApiData:
         resource = self.resource + service
 
         async with self.parallel_updates_semaphore:
-            with async_timeout.timeout(self.timeout, loop = self.hass.loop):
+            with async_timeout.timeout(self.timeout):
                 if objectid:
                     body = json.dumps({objectid: value})
                 else:
@@ -149,7 +149,7 @@ class TecoApiData:
             resource += '?' + objectid
 
         async with self.parallel_updates_semaphore:
-            with async_timeout.timeout(DEFAULT_TIMEOUT_WAIT if wait else self.timeout, loop = self.hass.loop):
+            with async_timeout.timeout(DEFAULT_TIMEOUT_WAIT if wait else self.timeout):
                 req = await websession.get(
                     resource,
                     auth = self.auth,
