@@ -31,6 +31,7 @@ from .const import (
     DATA_TECOAPI,
     CONF_OBJECT,
     CONF_SUBOBJECTS,
+    CONF_ARRAYSIZE,
     TECOAPI_GETOBJECT,
     TECOAPI_GETINFO,
     TECOAPI_GETLIST,
@@ -41,6 +42,7 @@ SENSOR_SCHEMA = {
     vol.Optional(CONF_NAME, default=""): cv.string,
     vol.Optional(CONF_DEVICE_CLASS): DEVICE_CLASSES_SCHEMA,
     vol.Optional(CONF_UNIT_OF_MEASUREMENT, default=""): cv.string,
+    vol.Optional(CONF_ARRAYSIZE, default=0): cv.positive_int,
     vol.Optional(CONF_SUBOBJECTS, default=[]): vol.All(cv.ensure_list, [vol.Self]), 
 }
 
@@ -124,20 +126,35 @@ async def async_setup_sensor(hass, data, config, entities, objectid, parent = No
         else:
             value = parent.child_values[objectid]
 
+        arraysize = config.get(CONF_ARRAYSIZE)
+
         if type(value) is dict:
-            sensor = TecoApiSensor(data, config, objectid, value, parent)
-            pos = len(entities)
+            arrayitems = [None]
+            if arraysize is not None and arraysize > 0:
+                arrayitems = range(arraysize)
 
-            sensors_config = config.get(CONF_SUBOBJECTS, [])
+            for i in arrayitems:
+                objectidx = objectid
+                if i is not None:
+                    objectidx = f"{objectid}[{i}]"
+                    
+                sensor = TecoApiSensor(data, config, objectidx, value, parent, i)
+                pos = len(entities)
 
-            for childid in value:
-                child_config = next((item for item in sensors_config if item.get(CONF_OBJECT) == childid), {})
-                await async_setup_sensor(hass, data, child_config, entities, childid, sensor)
+                sensors_config = config.get(CONF_SUBOBJECTS, [])
 
-            if parent is None or not sensor._children:
-                entities.insert(pos, sensor)
+                for childid in value:
+                    child_config = next((item for item in sensors_config if item.get(CONF_OBJECT) == childid), {})
+                    await async_setup_sensor(hass, data, child_config, entities, childid, sensor)
+
+                if parent is None or not sensor._children:
+                    entities.insert(pos, sensor)                
         elif type(value) is not None:
-            entities.append(TecoApiSensor(data, config, objectid, value, parent))
+            if arraysize is not None and arraysize > 0:
+                for i in range(arraysize):
+                    entities.append(TecoApiSensor(data, config, f"{objectid}[{i}]", value, parent, i))
+            else:
+                entities.append(TecoApiSensor(data, config, objectid, value, parent, None))
         else:
             _LOGGER.error("Unable to setup %s", objectid)
 
@@ -150,10 +167,10 @@ class TecoApiSensor(Entity):
     """TecoAPI Sensor Entity."""
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, data, config, objectid, value, parent):
+    def __init__(self, data, config, objectid, value, parent, index):
         """Init."""
         # pylint: disable=too-many-arguments
-
+        
         self._name = config.get(CONF_NAME)
         self._device_class = config.get(CONF_DEVICE_CLASS)
         self._unit_of_measurement = config.get(CONF_UNIT_OF_MEASUREMENT)
@@ -169,6 +186,9 @@ class TecoApiSensor(Entity):
         else:
             self._name = self._name or objectid
             self._value = value #only root items store data
+
+        if index is not None and index >= 0:
+            self._name += ' ' + str(index)
 
         self.entity_id = self.unique_id
 

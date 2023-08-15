@@ -6,6 +6,7 @@ import asyncio
 import aiohttp
 import async_timeout
 import voluptuous as vol
+import re
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
@@ -163,12 +164,14 @@ class TecoApiData:
 
                     if objectid:
                         for partid in objectid.split('.'):
+                            partid = re.sub(r'\[(\d+)\]$', '', partid)
                             value = value[partid]
-
+                            if type(value) == list:
+                                value = value[0]
                     return value
 
             _LOGGER.error(
-                _LOGGER.debug("TecoApi GET %s %s failed. Status: %s", service, objectid, req.status)
+                _LOGGER.debug("TecoApi GET %s %s failed. Status: %s, %s", service, objectid, req.status, resource)
             )
 
         return None
