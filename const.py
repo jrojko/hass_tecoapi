@@ -8,6 +8,7 @@ CONF_GETINFO = "getinfo"
 CONF_GETLIST = "getlist"
 CONF_SUBOBJECTS = "subobjects"
 CONF_VALUE = "value"
+CONF_ARRAYSIZE = "arraysize"
 
 DEFAULT_TIMEOUT = 0.3
 DEFAULT_TIMEOUT_WAIT = 10
